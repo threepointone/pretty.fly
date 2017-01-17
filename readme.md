@@ -33,7 +33,7 @@ no
 examples 
 ---
 ```jsx
-import { chan, go, timeout, put, alts, frame, idle } from 'pretty.fly'
+import { chan, go, timeout, put, alts, frame, idle, cancelled } from 'pretty.fly'
 ```
 
 
@@ -92,7 +92,7 @@ go(function*(){
       console.log('tick')      
     }
     catch(err){
-      if(err instanceof go.Cancellation){
+      if(cancelled(err)){
         console.error('cancelled!')
       }
     }
