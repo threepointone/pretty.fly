@@ -1,6 +1,8 @@
 pretty.fly
 ---
 
+[very early work, ignore]
+
 - primarily a learning exercise 
 - small, simple 
 - tree shakeable
