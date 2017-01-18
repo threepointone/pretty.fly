@@ -3,6 +3,7 @@ let EFFECT = Symbol('EFFECT')
 let CHANNEL = Symbol('CHANNEL')
 let TASK = Symbol('TASK')
 let CLOSED = Symbol('CLOSED')
+let CANCELLED = Symbol('CANCELLED')
 
 class Cancellation {}
 
@@ -17,44 +18,74 @@ class Buffer {
     this.maxLength = this.options.length || 0
     this.type = this.options.type || 'fixed' // sliding, dropping, fixed   
   }  
+  unbind = el => {
+    if(el){
+      if(typeof el === 'function'){
+        this.takers = this.takers.filter(x => x !== el)  
+        return 
+      }
+      this.queue = this.queue.filter(x => x !== el)
+      this.buffer = this.buffer.filter(x => x !== el)
+      if(this.buffer.length < this.maxLength && this.queue.length > 0){
+        let x  = this.queue.shift()
+        x.buffered = true
+        this.buffer.push(x)
+        // move to buffer 
+      }  
+    }    
+  }
+  
   put(val, fn) {
+    if(!this.open){
+      fn(this.open)
+      return       
+    }
     if(this.takers.length > 0){
       let taker = this.takers.shift()
       taker(val)
       fn(this.open)
-      return 
+      return
     }
 
-    if(this.buffer.length === this.maxLength){      
-      this.queue.push({val, fn})  
-      return 
+    if(this.buffer.length === this.maxLength){   
+      let el = { val, fn }
+      this.queue.push(el)  
+      return el
     }
-    this.buffer.push({ val })
-    fn()    
+    let el = { val, buffered: true }
+    this.buffer.push(el)
+    fn(this.open)
+    return el 
   }
   take(fn) {
-    let datum = this.buffer.length > 0 ? this.buffer.shift() : 
+    let datum
+
+    datum = this.buffer.length > 0 ? this.buffer.shift() : 
       this.queue.length > 0 ? this.queue.shift() : 
       null
     if(this.buffer.length < this.maxLength && this.queue.length > 0){
-      let { val, fn } = this.queue.shift()
-      this.buffer.push({ val })
+      // move an element from queue to buffer
+      let el = this.queue.shift()
+      el.buffered = true
+      this.buffer.push(el)
       fn(this.open)
     }
     if(datum) {
       fn(datum.val)
-      if(datum.fn) datum.fn(this.open)
-
+      if(!datum.buffered) {
+        datum.fn(this.open)
+      }
     }
     else {
       if(this.open){
-        this.takers.push(fn)  
+        this.takers.push(fn)
+        return fn 
       }
       else {
         fn(CLOSED)
       }      
     }    
-  }
+  }  
   close(){
     this.open = false 
     if(this.takers.length > 0){
@@ -72,7 +103,7 @@ class Buffer {
 let buffers = new WeakMap()
 
 export function go(gen, done = (err, res) => { if(err) throw err }) {
-  let finished = false, finishVal, errorVal, listeners = []
+  let finished = false, finishVal, errorVal, listeners = [], isCancelled = false, cancelReturn
   // todo - check if already iter
   const iter = gen()
   function onError(err){
@@ -84,23 +115,30 @@ export function go(gen, done = (err, res) => { if(err) throw err }) {
     return 
 
   }
-  // todo - try catch etc 
+  
+  
   function andThen(yieldedVal){
     let datum
     try{
-     datum = iter.next(yieldedVal)  
+     
+     if(isCancelled && cancelReturn.value && cancelReturn.value[EFFECT] === 'cancelled'){
+      datum = iter.next(true)   
+     }
+     else {
+      datum = iter.next(yieldedVal)    
+     }
     }
     catch(err) {
       onError(err)
       return 
     }
+    
 
     if(datum.done) {
-
       finished = true
       finishVal = datum.value
-      done(null, datum.value)
-      listeners.forEach(fn => fn(null, datum.value))
+      done(undefined, datum.value)
+      listeners.forEach(fn => fn(undefined, datum.value))
       listeners = []
       return 
     }
@@ -115,24 +153,48 @@ export function go(gen, done = (err, res) => { if(err) throw err }) {
           catch(err){
             onError(err)
             return 
-          }
-          
-          
+          }                    
         }
         case 'take': {
           let { chan, value } = datum.value 
           buffers.get(chan).take(value, andThen) 
           return 
         }
-        case 'cps': {
-          let { fn } = datum.value 
-          fn((err, x) => { 
-            if(err) {
-              // throw
-            }
-            andThen(x)
-          })
+        case 'cancelled': {          
+          andThen(isCancelled)
           return 
+        }
+        case 'alts': {
+          let { operations, opts = {} } = datum.value
+          // check syncly for any buffered
+          // check syncly for any queued 
+          // make choice 
+          // else add listener 
+
+          let unlistens = []
+          let donehere = false 
+          function win(val, i){
+            donehere = true 
+
+            unlistens.splice(i, 1).forEach(x => x.channel.unbind(x.val))
+            andThen({ channel: operations[i], value: val })
+            // remove all other listeners 
+          }
+          
+          operations.forEach((op, i) => {
+            // take 
+            if(!donehere){
+              if(op[EFFECT] === 'put'){
+                let tok = buffers.get(op.channel).put(op.channel, x => win(x, i))    
+                unlistens.push(tok)
+              }
+              else {
+                let tok = buffers.get(op).take(x => win(x, i))  
+                unlistens.push(tok)
+              }
+            }
+            
+          })
         }
         default: throw new Error(datum.value[EFFECT]) // should never get here
       }
@@ -176,7 +238,13 @@ export function go(gen, done = (err, res) => { if(err) throw err }) {
     [TASK]: true,
     cancel(e) {      
       // todo - stack
-      iter.throw(e || new Cancellation('cancelled'))
+      if(!isCancelled){
+        isCancelled = true
+        cancelReturn = iter.return(CANCELLED)
+        return true
+      }
+      return false 
+      
     },
     onDone(fn) {
       if(finished) {
@@ -184,16 +252,14 @@ export function go(gen, done = (err, res) => { if(err) throw err }) {
           fn(errorVal)
         }
         else {
-          fn(null, finishVal)
+          fn(undefined, finishVal)
         }
       }
       else {
         listeners.push(fn)
       }
     }
-  }
-
-  
+  }  
 
 }
 
@@ -219,10 +285,15 @@ export function put(chan, value) {
   }
 }
 export function timeout(n = 0) {
-  return done => setTimeout(done, n)
+  return done => setTimeout(() => done(), n)
 }
 
-// console.log(new Cancellation())
+export function cancelled(){
+  return {
+    [EFFECT]: 'cancelled'
+  }
+}
+
 
 
 

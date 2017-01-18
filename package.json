@@ -3,7 +3,17 @@
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "babel-tap src/tests.js"
+  },
   "dependencies": {
-    "jest": "^18.1.0"
+    "babel-preset-env": "^1.1.8",
+    "babel-preset-react": "^6.16.0",
+    "babel-preset-stage-0": "^6.16.0",
+    "babel-tap": "^5.0.0",
+    "jest": "^18.1.0",
+    "nwb": "^0.14.1",
+    "tap": "^9.0.3"
   }
 }
