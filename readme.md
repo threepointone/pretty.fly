@@ -102,3 +102,13 @@ go(function*(){
 })
 ```
 
+todo
+---
+- alts 
+- offer, poll
+- buffers
+- transducers 
+- spawn
+- all the [advanced](https://github.com/ubolonton/js-csp/blob/master/doc/advanced.md) ops
+
+
