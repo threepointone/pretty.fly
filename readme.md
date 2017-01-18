@@ -68,7 +68,7 @@ go(function*(){
   while(true){
     yield put(ch, Math.random())
   }  
-  // also - buffers, transducers, alts, etc 
+  // todo - buffers, transducers, alts, etc 
 
   // animation loops via requestAnimationFrame
   while(true){
@@ -91,17 +91,14 @@ go(function*(){
       yield timeout(500)
       console.log('tick')      
     }
-    catch(err){
-      if(cancelled(err)){
+    finally{
+      if(yield cancelled(err)){
         console.error('cancelled!')
       }
-    }
-    
+    }   
   })
+  // ...
   task.cancel()
-
-  
-
 })
 ```
 

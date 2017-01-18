@@ -284,14 +284,24 @@ export function put(chan, value) {
     [EFFECT]: 'put', chan, value 
   }
 }
-export function timeout(n = 0) {
-  return done => setTimeout(() => done(), n)
-}
 
 export function cancelled(){
   return {
     [EFFECT]: 'cancelled'
   }
+}
+
+export function timeout(n = 0) {
+  return done => setTimeout(() => done(), n)
+}
+
+
+export function frame(){
+  return done => requestAnimationFrame(time => done(undefined, time))
+}
+
+export function immediate(){
+
 }
 
 
