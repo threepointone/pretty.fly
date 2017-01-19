@@ -92,7 +92,7 @@ go(function*(){
       console.log('tick')      
     }
     finally{
-      if(yield cancelled(err)){
+      if(yield cancelled()){
         console.error('cancelled!')
       }
     }   
