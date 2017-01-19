@@ -301,7 +301,11 @@ export function frame(){
 }
 
 export function immediate(){
+  return done => setImmediate(() => done())
+}
 
+export function idle(){
+  return done => requestIdleCallback(deadline => done(undefined, deadline))
 }
 
 
