@@ -88,8 +88,9 @@ go(function*(){
   let task = go(function*(){
     try{
       while(true){
-      yield timeout(500)
-      console.log('tick')      
+        yield timeout(500)
+        console.log('tick')      
+      }
     }
     finally{
       if(yield cancelled()){
