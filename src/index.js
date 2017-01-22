@@ -5,8 +5,6 @@ let TASK = Symbol('TASK')
 let CLOSED = Symbol('CLOSED')
 let CANCELLED = Symbol('CANCELLED')
 
-class Cancellation {}
-
 
 class Buffer {
   constructor(options = {}){
@@ -88,15 +86,17 @@ class Buffer {
   }  
   close(){
     this.open = false 
+
     if(this.takers.length > 0){
       this.takers.forEach(fn => fn(CLOSED))
       this.takers = []
     }
-    if(this.queue.length > 0){
-      this.queue.forEach(x => x.fn(this.open))
-      this.queue = []
-      this.buffer = []
-    }
+    // todo - don't cancel pending puts (takes?)
+    // if(this.queue.length > 0){
+    //   this.queue.forEach(x => x.fn(this.open))
+    //   this.queue = []
+    //   this.buffer = []
+    // }
   }
 }
 
@@ -165,7 +165,9 @@ export function go(gen, done = (err, res) => { if(err) throw err }) {
           return 
         }
         case 'alts': {
-          let { operations, opts = {} } = datum.value
+          let { operations /*, opts = {} */} = datum.value
+          // opts.priority
+          // opts.default
           // check syncly for any buffered
           // check syncly for any queued 
           // make choice 
@@ -176,7 +178,7 @@ export function go(gen, done = (err, res) => { if(err) throw err }) {
           function win(val, i){
             donehere = true 
 
-            unlistens.splice(i, 1).forEach(x => x.channel.unbind(x.val))
+            unlistens.splice(i, 1).forEach(f => f())
             andThen({ channel: operations[i], value: val })
             // remove all other listeners 
           }
@@ -185,16 +187,17 @@ export function go(gen, done = (err, res) => { if(err) throw err }) {
             // take 
             if(!donehere){
               if(op[EFFECT] === 'put'){
-                let tok = buffers.get(op.channel).put(op.channel, x => win(x, i))    
-                unlistens.push(tok)
+                let tok = buffers.get(op.chan).put(op.value, x => win(x, i))  
+                unlistens.push(() => buffers.get(op.chan).unbind(tok))
               }
               else {
                 let tok = buffers.get(op).take(x => win(x, i))  
-                unlistens.push(tok)
+                unlistens.push(() => buffers.get(op).unbind(tok))
               }
             }
             
           })
+          return
         }
         default: throw new Error(datum.value[EFFECT]) // should never get here
       }
@@ -291,6 +294,7 @@ export function cancelled(){
   }
 }
 
+
 export function timeout(n = 0) {
   return done => setTimeout(() => done(), n)
 }
@@ -308,20 +312,33 @@ export function idle(){
   return done => requestIdleCallback(deadline => done(undefined, deadline))
 }
 
+export function alts(operations, opts) {
+  return {
+    [EFFECT]: 'alts', operations, opts
+  }
+}
+
+export function offer(ch, val) {
+
+}
+
+export function poll(ch) {
+
+}
+
+export function fixed(n) {
+
+}
+
+export function dropping(n) {
+
+}
+
+export function sliding(n) {
+
+}
 
 
-
-// export function offer(ch, value) {
-
-// }
-
-// export function poll(ch) {
-
-// }
-
-// export function alts(operations, options) {
-
-// }
 
 // export const buffers = {
 //   fixed,
@@ -333,3 +350,6 @@ export function idle(){
 
 // cancel
 // buffers
+
+// let cache = chan()
+// go(function(){})
